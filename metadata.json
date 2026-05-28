@@ -1,0 +1,6 @@
+{
+  "name": "Smart Fund Platform Analytics",
+  "description": "An interactive digital dashboard tracking assets under management, investment inflows, redemptions, account approval funnels, and historical trends for smart fund platforms.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-brand-bg: #0b0f19;
+  --color-brand-card: #131a2c;
+  --color-brand-card-light: #1e293b;
+  --color-brand-border: #1e293b;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-brand-bg);
+    color: #f1f5f9;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Animations and Custom Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0f19;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+.crypto-card-gradient {
+  background: linear-gradient(135deg, #131a2c 0%, #0f1423 100%);
+  border: 1px solid #1e293b;
+}
+
+.glow-green {
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+}
