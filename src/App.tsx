@@ -38,6 +38,7 @@ export default function App() {
   // Series visibility in Trend Chart
   const [showSubscription, setShowSubscription] = useState<boolean>(true);
   const [showRedemption, setShowRedemption] = useState<boolean>(true);
+  const [showNetFlow, setShowNetFlow] = useState<boolean>(true);
 
   // Time format calculations
   const formattedCountdown = useMemo(() => {
@@ -47,15 +48,94 @@ export default function App() {
     return `${hrs}:${mins}:${secs}`;
   }, [countdown]);
 
+  const [customDaysCount, setCustomDaysCount] = useState<string>('7');
+
+  // --- New states for account opening funnel monthly options ---
+  const [selectedFunnelMonth, setSelectedFunnelMonth] = useState<string>('latest');
+
+  // Compute a list of distinct YYYY-MM months present in dataset
+  const availableFunnelMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    dataset.forEach(d => {
+      monthsSet.add(`${d.year}-${d.month}`);
+    });
+    return Array.from(monthsSet).sort();
+  }, [dataset]);
+
+  // Compute the record for chosen month or latest
+  const funnelRecord = useMemo(() => {
+    if (selectedFunnelMonth === 'latest') {
+      return dataset[dataset.length - 1];
+    }
+    // Filter records in that month
+    const monthRecs = dataset.filter(d => `${d.year}-${d.month}` === selectedFunnelMonth);
+    if (monthRecs.length > 0) {
+      // End of that month's snap state
+      return monthRecs[monthRecs.length - 1];
+    }
+    return dataset[dataset.length - 1];
+  }, [dataset, selectedFunnelMonth]);
+
+  // Compute net additions (delta) within that specific month (or standard period)
+  const funnelDelta = useMemo(() => {
+    if (selectedFunnelMonth === 'latest') {
+      // Compare the current latest with the beginning of state or previous 30 days
+      const baseline = dataset[Math.max(0, dataset.length - 30)];
+      const current = dataset[dataset.length - 1];
+      return {
+        isLatestAllTime: true,
+        periodName: '近30天',
+        deltaTotal: current.accTotal - baseline.accTotal,
+        deltaSuccess: current.accSuccess - baseline.accSuccess,
+        deltaPending: current.accPending - baseline.accPending,
+        deltaMissing: current.accMissing - baseline.accMissing,
+        deltaFailed: current.accFailed - baseline.accFailed,
+      };
+    }
+
+    // Find first day of the selected month inside dataset to subtract
+    const monthRecs = dataset.filter(d => `${d.year}-${d.month}` === selectedFunnelMonth);
+    if (monthRecs.length === 0) return null;
+
+    const firstIndex = dataset.findIndex(d => `${d.year}-${d.month}` === selectedFunnelMonth);
+    const baseline = firstIndex > 0 ? dataset[firstIndex - 1] : {
+      accTotal: 0,
+      accSuccess: 0,
+      accPending: 0,
+      accMissing: 0,
+      accFailed: 0,
+    };
+    
+    const endState = monthRecs[monthRecs.length - 1];
+    return {
+      isLatestAllTime: false,
+      periodName: `${selectedFunnelMonth} 整個月份`,
+      deltaTotal: endState.accTotal - baseline.accTotal,
+      deltaSuccess: endState.accSuccess - baseline.accSuccess,
+      deltaPending: endState.accPending - baseline.accPending,
+      deltaMissing: endState.accMissing - baseline.accMissing,
+      deltaFailed: endState.accFailed - baseline.accFailed,
+    };
+  }, [dataset, selectedFunnelMonth]);
+
   // Handle core simulation increments
-  const triggerDailyUpdate = useCallback(() => {
+  const triggerSimulationAdvancement = useCallback((days: number) => {
+    if (isNaN(days) || days <= 0) return;
     setDataset(prev => {
-      const lastItem = prev[prev.length - 1];
-      const newItem = generateNextDayRecord(lastItem);
-      return [...prev, newItem];
+      let currentList = [...prev];
+      for (let i = 0; i < days; i++) {
+        const lastItem = currentList[currentList.length - 1];
+        const newItem = generateNextDayRecord(lastItem);
+        currentList.push(newItem);
+      }
+      return currentList;
     });
     setCountdown(24 * 3600);
   }, []);
+
+  const triggerDailyUpdate = useCallback(() => {
+    triggerSimulationAdvancement(1);
+  }, [triggerSimulationAdvancement]);
 
   // Auto-play ticking engine
   useEffect(() => {
@@ -206,7 +286,10 @@ export default function App() {
       const redRatio = record.totalRed / maxVal;
       const redY = chartHeight - chartPadding - redRatio * drawHeight;
 
-      return { x, subY, redY, record };
+      const netRatio = record.netFlow / maxVal;
+      const netY = chartHeight - chartPadding - netRatio * drawHeight;
+
+      return { x, subY, redY, netY, record };
     });
 
     return { trendPoints: points, trendMaxVal: maxVal };
@@ -214,15 +297,17 @@ export default function App() {
 
   // Generate SVG Cubic Path expressions
   const linePaths = useMemo(() => {
-    if (trendPoints.length === 0) return { subPath: '', redPath: '', subAreaPath: '' };
+    if (trendPoints.length === 0) return { subPath: '', redPath: '', netPath: '', subAreaPath: '' };
 
     let subPath = `M ${trendPoints[0].x} ${trendPoints[0].subY}`;
     let redPath = `M ${trendPoints[0].x} ${trendPoints[0].redY}`;
+    let netPath = `M ${trendPoints[0].x} ${trendPoints[0].netY}`;
     
     for (let i = 1; i < trendPoints.length; i++) {
       // Connect points nicely
       subPath += ` L ${trendPoints[i].x} ${trendPoints[i].subY}`;
       redPath += ` L ${trendPoints[i].x} ${trendPoints[i].redY}`;
+      netPath += ` L ${trendPoints[i].x} ${trendPoints[i].netY}`;
     }
 
     // Build translucent ambient glowing fill pathway
@@ -233,7 +318,7 @@ export default function App() {
       Z
     `;
 
-    return { subPath, redPath, subAreaPath };
+    return { subPath, redPath, netPath, subAreaPath };
   }, [trendPoints]);
 
   // Compute AUM dynamic bar values
@@ -291,15 +376,64 @@ export default function App() {
               下一輪自動更新倒數: <span id="countdown" className="text-emerald-400 font-bold ml-1">{formattedCountdown}</span>
             </div>
             
-            <button 
-              id="manual-sim" 
-              onClick={triggerDailyUpdate}
-              className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-xs font-medium transition-all shadow-md shadow-blue-500/10 cursor-pointer flex items-center gap-1"
-            >
-              <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" />
-              模擬天數+1
-            </button>
+            <div className="flex items-center gap-1.5 bg-slate-950/40 p-1 rounded-lg border border-slate-800/80">
+              <span className="text-[11px] text-slate-400 font-sans pl-1">前進天數:</span>
+              <input 
+                type="number" 
+                min="1" 
+                max="365"
+                value={customDaysCount}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCustomDaysCount(val);
+                }}
+                className="w-12 bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-xs text-white text-center font-mono focus:border-blue-500 focus:outline-none"
+                placeholder="7"
+                title="輸入自訂模擬天數"
+              />
+              <button 
+                id="manual-sim" 
+                onClick={() => {
+                  const days = parseInt(customDaysCount, 10);
+                  if (!isNaN(days) && days > 0) {
+                    triggerSimulationAdvancement(days);
+                  } else {
+                    triggerSimulationAdvancement(1);
+                  }
+                }}
+                className="px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-md text-xs font-medium transition-all shadow shadow-blue-500/10 cursor-pointer flex items-center gap-1"
+                title="依指定自訂天數前進"
+              >
+                <RefreshCw className="w-3 h-3" />
+                模擬前進
+              </button>
+            </div>
             
+            {/* 常用快捷按鈕 */}
+            <div className="flex items-center gap-1 border-l border-slate-800 pl-2">
+              <button 
+                onClick={() => triggerSimulationAdvancement(1)}
+                className="px-2 py-1 bg-slate-800/80 hover:bg-slate-700 hover:text-white text-slate-300 rounded text-2xs transition cursor-pointer"
+                title="模擬前進 1 天"
+              >
+                +1 天
+              </button>
+              <button 
+                onClick={() => triggerSimulationAdvancement(7)}
+                className="px-2 py-1 bg-slate-800/80 hover:bg-slate-700 hover:text-white text-slate-300 rounded text-2xs transition cursor-pointer"
+                title="模擬前進 7 天"
+              >
+                +7 天
+              </button>
+              <button 
+                onClick={() => triggerSimulationAdvancement(30)}
+                className="px-2 py-1 bg-slate-800/80 hover:bg-slate-700 hover:text-white text-slate-300 rounded text-2xs transition cursor-pointer"
+                title="模擬前進 30 天"
+              >
+                +30 天
+              </button>
+            </div>
+
             <button 
               id="autoplay-toggle" 
               onClick={() => setAutoPlay(!autoPlay)}
@@ -514,6 +648,18 @@ export default function App() {
                   <span className="w-2.5 h-2.5 border border-dashed border-rose-500 w-3 h-0.5 inline-block"></span>
                   總贖回量
                 </button>
+                <button 
+                  onClick={() => setShowNetFlow(prev => !prev)}
+                  className={`flex items-center gap-1.5 text-amber-500 transition-all duration-200 cursor-pointer select-none border border-transparent px-1.5 py-0.5 rounded ${
+                    showNetFlow 
+                      ? 'opacity-100 hover:bg-amber-500/10' 
+                      : 'opacity-35 line-through hover:opacity-60 hover:bg-slate-800'
+                  }`}
+                  title="點擊隱藏/顯示淨申購趨勢線"
+                >
+                  <span className="w-2.5 h-2.5 bg-amber-500 rounded-full"></span>
+                  淨申購
+                </button>
               </div>
             </div>
 
@@ -604,6 +750,14 @@ export default function App() {
                     strokeDasharray="4 3" 
                   />
                 )}
+                {showNetFlow && (
+                  <path 
+                    d={linePaths.netPath} 
+                    fill="none" 
+                    stroke="#f59e0b" 
+                    strokeWidth={2} 
+                  />
+                )}
 
                 {/* Point indicators & trigger areas */}
                 {trendPoints.map((pt, i) => {
@@ -628,6 +782,17 @@ export default function App() {
                           cy={pt.redY} 
                           r={isHovered ? 4.5 : 2} 
                           fill="#f43f5e" 
+                          stroke="#0b0f19" 
+                          strokeWidth={isHovered ? 1.25 : 0.5}
+                        />
+                      )}
+                      {/* NetFlow Dot */}
+                      {showNetFlow && (
+                        <circle 
+                          cx={pt.x} 
+                          cy={pt.netY} 
+                          r={isHovered ? 4.5 : 2} 
+                          fill="#f59e0b" 
                           stroke="#0b0f19" 
                           strokeWidth={isHovered ? 1.25 : 0.5}
                         />
@@ -702,7 +867,10 @@ export default function App() {
                   )}
 
                   <p className="text-slate-300 font-semibold flex justify-between items-center pt-1 border-t border-slate-800 text-[11px]">
-                    <span>淨流量:</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 bg-amber-500 rounded-full inline-block"></span>
+                      淨申購:
+                    </span>
                     <span className={trendPoints[hoveredTrendIndex].record.netFlow >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
                       {trendPoints[hoveredTrendIndex].record.netFlow >= 0 ? '+' : ''}
                       {trendPoints[hoveredTrendIndex].record.netFlow.toLocaleString()} 萬
@@ -832,14 +1000,30 @@ export default function App() {
                   <Users className="w-4 h-4 text-purple-400" />
                   開戶手續狀態監控
                 </h3>
-                <span className="text-[10px] text-slate-500 font-mono">即時統計</span>
+                <div className="relative">
+                  <select
+                    value={selectedFunnelMonth}
+                    onChange={(e) => setSelectedFunnelMonth(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 text-slate-350 text-2xs md:text-xs rounded-lg px-2 py-0.5 focus:border-purple-500 focus:outline-none cursor-pointer hover:border-slate-700 transition"
+                    title="切換統計月份"
+                  >
+                    <option value="latest">最新累計數據</option>
+                    {availableFunnelMonths.map(month => (
+                      <option key={month} value={month}>{month} 數據統計</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <p className="text-xs text-slate-400 mb-4">開戶件數審件漏斗與流程效率監測</p>
+              <p className="text-xs text-slate-400 mb-4">
+                {selectedFunnelMonth === 'latest' ? '開戶件數審件漏斗與流程效率監測' : `[${selectedFunnelMonth}] 歷史存量統計與漏斗審理狀態`}
+              </p>
 
               <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/80 mb-4 text-center">
-                <p className="text-2xs text-slate-400 uppercase tracking-wider mb-1">期末申請件完成率</p>
+                <p className="text-2xs text-slate-400 uppercase tracking-wider mb-1">
+                  {selectedFunnelMonth === 'latest' ? '總申請件完成率 (累積)' : `${selectedFunnelMonth} 期末完成率`}
+                </p>
                 <p className="text-3xl sm:text-4xl font-extrabold font-mono text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 glow-green">
-                  {latestRecord.accRate}%
+                  {funnelRecord.accRate}%
                 </p>
                 <p className="text-[10px] text-slate-500 mt-1.5">公式: 申請完成 / 歷史總申請戶數</p>
               </div>
@@ -854,12 +1038,12 @@ export default function App() {
                       <Hourglass className="w-3.5 h-3.5 text-blue-500" />
                       待審核中 (KYC專員)
                     </span>
-                    <span className="font-mono font-semibold text-slate-200">{latestRecord.accPending.toLocaleString()} 戶</span>
+                    <span className="font-mono font-semibold text-slate-200">{funnelRecord.accPending.toLocaleString()} 戶</span>
                   </div>
                   <div className="w-full bg-slate-900 rounded-full h-1.5">
                     <div 
                       className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, Math.max(1, (latestRecord.accPending / latestRecord.accTotal) * 100))}%` }}
+                      style={{ width: `${Math.min(100, Math.max(1, (funnelRecord.accPending / funnelRecord.accTotal) * 100))}%` }}
                     ></div>
                   </div>
                 </div>
@@ -871,12 +1055,12 @@ export default function App() {
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                       審核完成 (已可下單)
                     </span>
-                    <span className="font-mono font-semibold text-emerald-400">{latestRecord.accSuccess.toLocaleString()} 戶</span>
+                    <span className="font-mono font-semibold text-emerald-400">{funnelRecord.accSuccess.toLocaleString()} 戶</span>
                   </div>
                   <div className="w-full bg-slate-900 rounded-full h-1.5">
                     <div 
                       className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${latestRecord.accRate}%` }}
+                      style={{ width: `${funnelRecord.accRate}%` }}
                     ></div>
                   </div>
                 </div>
@@ -888,12 +1072,12 @@ export default function App() {
                       <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
                       缺件通知 (等待補正)
                     </span>
-                    <span className="font-mono font-semibold text-slate-200">{latestRecord.accMissing.toLocaleString()} 戶</span>
+                    <span className="font-mono font-semibold text-slate-200">{funnelRecord.accMissing.toLocaleString()} 戶</span>
                   </div>
                   <div className="w-full bg-slate-900 rounded-full h-1.5">
                     <div 
                       className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, Math.max(1, (latestRecord.accMissing / latestRecord.accTotal) * 100))}%` }}
+                      style={{ width: `${Math.min(100, Math.max(1, (funnelRecord.accMissing / funnelRecord.accTotal) * 100))}%` }}
                     ></div>
                   </div>
                 </div>
@@ -905,22 +1089,51 @@ export default function App() {
                       <XCircle className="w-3.5 h-3.5 text-rose-500" />
                       審核未過 (拒絕或取消)
                     </span>
-                    <span className="font-mono font-semibold text-slate-200">{latestRecord.accFailed.toLocaleString()} 戶</span>
+                    <span className="font-mono font-semibold text-slate-200">{funnelRecord.accFailed.toLocaleString()} 戶</span>
                   </div>
                   <div className="w-full bg-slate-900 rounded-full h-1.5">
                     <div 
                       className="bg-rose-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(100, Math.max(1, (latestRecord.accFailed / latestRecord.accTotal) * 100))}%` }}
+                      style={{ width: `${Math.min(100, Math.max(1, (funnelRecord.accFailed / funnelRecord.accTotal) * 100))}%` }}
                     ></div>
                   </div>
                 </div>
 
               </div>
+
+              {/* Incremental Analysis block below progress lines */}
+              {funnelDelta && (
+                <div className="mt-4 p-3 bg-purple-950/20 border border-purple-900/30 rounded-xl">
+                  <div className="flex justify-between items-center text-[10px] font-semibold text-purple-400 uppercase tracking-wider mb-2">
+                    <span>{funnelDelta.periodName} 新增件數</span>
+                    <span className="text-[9px] bg-purple-500/15 px-1 rounded text-purple-350 font-normal">增量統計</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                    <div className="text-[11px] text-slate-400 flex justify-between">
+                      <span>總增件:</span>
+                      <span className="font-mono text-purple-300 font-medium">+{funnelDelta.deltaTotal.toLocaleString()}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex justify-between">
+                      <span>新待審:</span>
+                      <span className="font-mono text-blue-400 font-medium">+{funnelDelta.deltaPending.toLocaleString()}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex justify-between">
+                      <span>新完成:</span>
+                      <span className="font-mono text-emerald-400 font-semibold">+{funnelDelta.deltaSuccess.toLocaleString()}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex justify-between">
+                      <span>新缺件:</span>
+                      <span className="font-mono text-amber-400 font-semibold">+{funnelDelta.deltaMissing.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
 
             <div className="border-t border-slate-800/80 pt-3.5 mt-4 flex justify-between text-xs text-slate-400 font-medium">
-              <span>累計歷史總申請件數:</span>
-              <span className="font-mono text-white font-bold">{latestRecord.accTotal.toLocaleString()} 戶</span>
+              <span>期末累計總申請件數:</span>
+              <span className="font-mono text-white font-bold">{funnelRecord.accTotal.toLocaleString()} 戶</span>
             </div>
           </div>
 
