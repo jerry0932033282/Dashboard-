@@ -167,7 +167,7 @@ export default function App() {
     const encodedUri = encodeURI(csvContent);
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', encodedUri);
-    downloadAnchor.setAttribute('download', `智慧基金數據報表_${timeframe}_${activeDateString}.csv`);
+    downloadAnchor.setAttribute('download', `基金平台數據智慧報表_${timeframe}_${activeDateString}.csv`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     document.body.removeChild(downloadAnchor);
@@ -277,7 +277,7 @@ export default function App() {
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
               </span>
               <h1 id="app-title" className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
-                智慧基金平台數據儀表板
+                基金平台數據智慧儀表板
               </h1>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 flex items-center gap-1">
@@ -1005,7 +1005,7 @@ export default function App() {
 
         {/* Global Footer Credits */}
         <footer className="text-center text-xs text-slate-600 mt-8 pb-4">
-          智慧基金數據分析平台 &bull; 內置即時動態仿真數據更新引擎 &bull; 2026 版權所有
+          基金平台數據智慧分析平台 &bull; 內置即時動態仿真數據更新引擎 &bull; 2026 版權所有
         </footer>
 
       </div>
