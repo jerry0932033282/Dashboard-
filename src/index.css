@@ -5,16 +5,16 @@
   --font-sans: "Inter", "Noto Sans TC", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-brand-bg: #0b0f19;
-  --color-brand-card: #131a2c;
-  --color-brand-card-light: #1e293b;
-  --color-brand-border: #1e293b;
+  --color-brand-bg: #f8fafc;
+  --color-brand-card: #ffffff;
+  --color-brand-card-light: #f1f5f9;
+  --color-brand-border: #cbd5e1;
 }
 
 @layer base {
   body {
     background-color: var(--color-brand-bg);
-    color: #f1f5f9;
+    color: #334155;
     font-family: var(--font-sans);
   }
 }
@@ -25,21 +25,22 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0f19;
+  background: #f8fafc;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #cbd5e1;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #94a3b8;
 }
 
 .crypto-card-gradient {
-  background: linear-gradient(135deg, #131a2c 0%, #0f1423 100%);
-  border: 1px solid #1e293b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 18px -1px rgba(0, 0, 0, 0.04), 0 2px 8px -1px rgba(0, 0, 0, 0.02);
 }
 
 .glow-green {
-  text-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
 }
